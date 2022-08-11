@@ -1,8 +1,6 @@
 # last updated 12/12/2021
 library(tidyverse)
 library(tidycensus)
-library(tidybayes)
-library(brms)
 
 cuy_tracts <- tigris::tracts(state = "OH", county = "cuyahoga", year = 2016)
 cuy_tracts$tract <- cuy_tracts$TRACTCE
@@ -397,9 +395,9 @@ d_geo <- d_geo[d_geo$tract %in% mod$tract,]
 
 vars0 <- c("tract","total_population","rev",
            # nonprofits
-           "human_services1","education1","public1","religion1","oth1","arts1","health","total",
+           "human_services1","education1","public1","religion1","oth_not_religion","arts1","health","total",
            # need 
-           "need","perc_poverty_100")
+           "need","perc_poverty_100","perc_vac_census","median_income","perc_black", "perc_latinx")
            
            
            # "perc_owner", "perc_college_or_greater", "perc_black", "perc_latinx", "perc_single_female",
@@ -419,4 +417,15 @@ mod <- mod %>% mutate(total_less_substance = total - substance_use_daycare)
 mod <- mod %>% rowwise() %>% mutate(t_child = sum(substantiated, indicated, unsubstantiated))
 
 names(mod)
+shfile <- d_geo["tract"]
+df <- mod[vars0]
+dim(df)
+head(df)
+df[is.na(df$rev) == TRUE ,]$rev <- 0
+apply(df, 2, function(x) sum(is.na(x)))
+write.csv(df, "spatial_example_dat.csv")
+sf::st_write(shfile, "cuyahoga_example.shp")
 
+
+x <- sf::st_read("cuyahoga_example.shp")
+head(x)
