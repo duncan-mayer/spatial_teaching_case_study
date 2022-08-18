@@ -1,7 +1,9 @@
-library('ggplot2')
 library('biscale')
 library('sf')
 library('cowplot')
+library('viridis')
+library('tidyverse')
+library('patchwork')
 # read shape file
 cuy_shp <- sf::st_read("teaching_spatial_data/cuyahoga_example.shp")
 
@@ -12,7 +14,113 @@ df$tract <- as.character(df$tract)
 df <- tigris::geo_join(cuy_shp, df, by = "tract")
 
 bi_dat <- bi_class(df, x = total, y = need, style = "quantile", dim = 4) # alternatives 
+# local morans i 
+w <- spdep::poly2nb(cuy_shp, row.names = cuy_shp$tract, queen = TRUE)
+adj_list <- spdep::nb2listw(w)
 
+df$local_moran_density  <- spdep::localmoran(df$total, adj_list)[,1]
+df$local_moran_rev  <- spdep::localmoran(df$rev, adj_list)[,1]
+# calculate global morans i
+# these can also be founding by averaging over the local moran's i, e.g. mean(df$local_moran_rev)
+spdep::moran.test(df$total, adj_list)
+spdep::moran.test(df$rev, adj_list)
+# maps for revenue and density with local moran's 
+# discretize density 
+df <- df %>% mutate(total_discrete =
+                        case_when(
+                          #total_orgs < 5 ~ "1-4",
+                          #total_orgs >= 5 & total_orgs < 11 ~ "less than 10",
+                          total < 11 ~ "10 or less",
+                          total >= 11 & total < 20 ~ "11-19",
+                          total >= 20 & total < 100 ~ "20-99",
+                          total >= 100 ~ "100 or more"))
+df$total_discrete <- factor(df$total_discrete, levels = c("10 or less","11-19" ,"20-99","100 or more"))
+#
+df$rev_std <- scale(log1p(df$rev / 10000))[,1]
+
+
+(map1a <- ggplot(data = df, mapping = aes(fill = total_discrete)) +
+    geom_sf() + 
+    scale_fill_viridis(option = "plasma", discrete = TRUE) + 
+    guides(fill=guide_legend(title="Nonproft density",title.position="top")) +
+    theme_classic(base_family = "Times", base_size = 8) +
+    theme(legend.key.size = unit(.4, 'cm'), 
+          legend.position = c(.3, .85), 
+          legend.direction = "horizontal",
+          axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank()) 
+  )
+
+(map1b <- ggplot(data = df, mapping = aes(fill = rev_std)) +
+    geom_sf() + 
+    scale_fill_viridis(option = "plasma", discrete = FALSE) + 
+    guides(fill=guide_legend(title="Revenue (log)",title.position="top")) +
+    theme_classic(base_family = "Times", base_size = 8) +
+    theme(legend.key.size = unit(.4, 'cm'), 
+          legend.position = c(.3, .85), 
+          legend.direction = "horizontal",
+          axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank()) 
+)
+
+df <- df %>% mutate(moran_dens_discrete = 
+                case_when(
+                  local_moran_density < -.5 ~ "less than -.5",
+                  local_moran_density >= -.5 & local_moran_density < 0 ~ "-.5-0",
+                  local_moran_density >= 0 & local_moran_density < .5  ~ "0-.5",
+                  local_moran_density > .5 ~ "greater than .5"))
+
+df$moran_dens_discrete <- factor(df$moran_dens_discrete, levels = c("less than -.5","-.5-0" ,"0-.5","greater than .5"))
+(map1c <- ggplot() +
+    geom_sf(data = df, mapping = aes(fill = moran_dens_discrete)) + 
+    scale_fill_viridis(option = "plasma", discrete =TRUE) + 
+    guides(fill=guide_legend(title="Local moran's i (density)",title.position="top")) +
+    theme_classic(base_family = "Times", base_size = 8) +
+    theme(legend.key.size = unit(.4, 'cm'), 
+          legend.position = c(.3, .85), 
+          legend.direction = "horizontal",
+          axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank()) 
+)
+
+df <- df %>% mutate(moran_rev_discrete = 
+                      case_when(
+                        local_moran_rev < -.5 ~ "less than -.5",
+                        local_moran_rev >= -.5 & local_moran_rev < 0 ~ "-.5-0",
+                        local_moran_rev >= 0 & local_moran_rev < .5  ~ "0-.5",
+                        local_moran_rev > .5 ~ "greater than .5"))
+
+(map1d <- ggplot() +
+    geom_sf(data = df, mapping = aes(fill = moran_rev_discrete)) + 
+    scale_fill_viridis(option = "plasma", discrete =TRUE) + 
+    guides(fill=guide_legend(title="Local moran's i (revenue)",title.position="top")) +
+    theme_classic(base_family = "Times", base_size = 8) +
+    theme(legend.key.size = unit(.4, 'cm'), 
+          legend.position = c(.3, .85), 
+          legend.direction = "horizontal",
+          axis.line=element_blank(),axis.text.x=element_blank(),
+          axis.text.y=element_blank(),axis.ticks=element_blank(),
+          axis.title.x=element_blank(),
+          axis.title.y=element_blank()) 
+)
+
+# compose plots
+layout <- '
+AB
+CD
+'
+(fig1 <- wrap_plots(A = map1a, B = map1b, C = map1c, map1d, design = layout))
+cowplot::save_plot(filename = "fig_1_spatialeda.png", 
+                   plot = fig1, nrow = 2, ncol = 2, dpi = 1500, base_height = 4, base_width = 4)
+
+
+# maps
 (map <- ggplot() +
   geom_sf(data = bi_dat, mapping = aes(fill = bi_class), color = "white", size = 0.1, show.legend = FALSE) +
   bi_scale_fill(pal = "DkBlue2", dim = 4) + bi_theme())
