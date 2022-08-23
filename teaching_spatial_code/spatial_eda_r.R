@@ -8,12 +8,12 @@ library('patchwork')
 cuy_shp <- sf::st_read("teaching_spatial_data/cuyahoga_example.shp")
 
 # read csv of data, note that csv's do not retain the structure of the data, so we must coerce tracts to character
-df <- read.csv("teaching_spatial_data/spatial_example_dat.csv")[-1]
+df <- read.csv("teaching_spatial_data/spatial_example_dat.csv")
 df$tract <- as.character(df$tract)
 
 df <- tigris::geo_join(cuy_shp, df, by = "tract")
 
-bi_dat <- bi_class(df, x = total, y = need, style = "quantile", dim = 4) # alternatives 
+bi_dat <- bi_class(df, x = total, y = ndi, style = "quantile", dim = 4) # alternatives 
 # local morans i 
 w <- spdep::poly2nb(cuy_shp, row.names = cuy_shp$tract, queen = TRUE)
 adj_list <- spdep::nb2listw(w)
@@ -130,13 +130,14 @@ cowplot::save_plot(filename = "fig_1_spatialeda.png",
 legend <- bi_legend(pal = "DkBlue2",
                     base_family = "serif",
                     dim = 4,
-                    xlab = "Nonprofit density ",
-                    ylab = "Need",
-                    size = 8)
+                    xlab = "  Nonprofit Density",
+                    ylab = "  NDI",
+                    size = 6)
 
 (endmap <- ggdraw() +
   draw_plot(map, 0, 0, 1, 1) +
   draw_plot(legend, 0.25, .65, 0.2, 0.2) +
   bi_theme() )
   
-  
+cowplot::save_plot(filename = "fig_2_spatialeda.png", 
+                   plot = endmap, nrow = 1, ncol = 1, dpi = 1500, base_height = 4, base_width = 4)
