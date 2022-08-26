@@ -1,11 +1,13 @@
+# load required packages
 library('biscale')
 library('sf')
 library('cowplot')
 library('viridis')
 library('tidyverse')
 library('patchwork')
+library('spdep')
 # read shape file
-cuy_shp <- sf::st_read("teaching_spatial_data/cuyahoga_example.shp")
+cuy_shp <- sf::st_read("teaching_spatial_data/cuyahoga_shape_2016/cuyahoga_example.shp")
 
 # read csv of data, note that csv's do not retain the structure of the data, so we must coerce tracts to character
 df <- read.csv("teaching_spatial_data/spatial_example_dat.csv")
@@ -13,17 +15,18 @@ df$tract <- as.character(df$tract)
 
 df <- tigris::geo_join(cuy_shp, df, by = "tract")
 
-bi_dat <- bi_class(df, x = total, y = ndi, style = "quantile", dim = 4) # alternatives 
 # local morans i 
 w <- spdep::poly2nb(cuy_shp, row.names = cuy_shp$tract, queen = TRUE)
 adj_list <- spdep::nb2listw(w)
 
 df$local_moran_density  <- spdep::localmoran(df$total, adj_list)[,1]
 df$local_moran_rev  <- spdep::localmoran(df$rev, adj_list)[,1]
+df$geary_rev  <- spdep::geary(df$rev, adj_list)
 # calculate global morans i
 # these can also be founding by averaging over the local moran's i, e.g. mean(df$local_moran_rev)
 spdep::moran.test(df$total, adj_list)
 spdep::moran.test(df$rev, adj_list)
+
 # maps for revenue and density with local moran's 
 # discretize density 
 df <- df %>% mutate(total_discrete =
@@ -37,7 +40,9 @@ df <- df %>% mutate(total_discrete =
 df$total_discrete <- factor(df$total_discrete, levels = c("10 or less","11-19" ,"20-99","100 or more"))
 #
 df$rev_std <- scale(log1p(df$rev / 10000))[,1]
-
+x1 <- skimr::skim(df$rev/10000)
+t1 <- data.frame(var = x$skim_variable, x$numeric.mean, x$numeric.sd, min = x$numeric.p0, max = x$numeric.p100)
+write.csv(t1, "table_1_spcasestudy.csv")
 
 (map1a <- ggplot(data = df, mapping = aes(fill = total_discrete)) +
     geom_sf() + 
@@ -115,10 +120,13 @@ layout <- '
 AB
 CD
 '
-(fig1 <- wrap_plots(A = map1a, B = map1b, C = map1c, map1d, design = layout))
+(fig1 <- wrap_plots(A = map1a, B = map1b, C = map1c, map1d, design = layout) +  plot_annotation(tag_levels = 'A'))
 cowplot::save_plot(filename = "fig_1_spatialeda.png", 
                    plot = fig1, nrow = 2, ncol = 2, dpi = 1500, base_height = 4, base_width = 4)
 
+
+# create bi scale for mapping 
+bi_dat <- bi_class(df, x = total, y = ndi, style = "quantile", dim = 4) # alternatives 
 
 # maps
 (map <- ggplot() +
